@@ -1,0 +1,37 @@
+import rtmidi
+import time
+
+class MIDIDriver:
+    def __init__(self, port_name="GestureSynth"):
+        self.midi_out = rtmidi.MidiOut()
+        self.available_ports = self.midi_out.get_ports()
+        
+        # Open an existing port or create a virtual one
+        if self.available_ports:
+            print(f"Connecting to: {self.available_ports[0]}")
+            self.midi_out.open_port(0)
+        else:
+            print("No MIDI ports found. Opening virtual port...")
+            self.midi_out.open_virtual_port(port_name)
+            
+        self.current_note = None
+
+    def send_note(self, note, velocity):
+        """
+        Sends a MIDI Note On and Note Off message.
+        """
+        # 1. If the hand leaves or changes notes, turn off the previous note
+        if self.current_note and (note != self.current_note or velocity < 5):
+            self.midi_out.send_message([0x80, self.current_note, 0]) # 0x80 = Note Off
+            self.current_note = None
+            
+        # 2. Trigger a new note if pitch is detected and mouth is open
+        if note and velocity > 10 and note != self.current_note:
+            self.midi_out.send_message([0x90, note, velocity]) # 0x90 = Note On
+            self.current_note = note
+
+    def close(self):
+        """Turn off all notes and close port."""
+        if self.current_note:
+            self.midi_out.send_message([0x80, self.current_note, 0])
+        self.midi_out.close_port()
