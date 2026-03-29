@@ -54,3 +54,25 @@ class MusicProcessor:
         dynamics = self.get_dynamics(face_lm)
         
         return {"pitch": pitch, "velocity": dynamics}
+
+    def get_accidental(self, face_landmarks):
+    """Detects if the user is looking left (Flat) or right (Sharp)."""
+    if not face_landmarks:
+        return 0
+
+    # Right Eye Landmarks: 473 (Iris Center), 362 (Inner Corner), 263 (Outer Corner)
+    iris = face_landmarks.landmark[473].x
+    inner_corner = face_landmarks.landmark[362].x
+    outer_corner = face_landmarks.landmark[263].x
+
+    # Calculate relative position (0.0 to 1.0)
+    # 0.5 is centered, < 0.4 is looking one way, > 0.6 is the other
+    total_width = abs(outer_corner - inner_corner)
+    relative_pos = (iris - inner_corner) / total_width
+
+    if relative_pos < 0.35:  # Looking noticeably Left
+        return -1 # Flat
+    elif relative_pos > 0.65: # Looking noticeably Right
+        return 1  # Sharp
+    
+    return 0 # Natural
