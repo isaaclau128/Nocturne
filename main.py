@@ -54,6 +54,13 @@ def main():
                     
                     # Visual Feedback for Pitch
                     h, w, _ = frame.shape
+                    for i in range(7):
+                        # Draw horizontal lines for the 7 zones
+                        y_line = int(h * (0.2 + (i * 0.085))) # Matches the 0.2-0.8 mapping in processor
+                        cv2.line(frame, (0, y_line), (w, y_line), (255, 255, 255), 1)
+                        cv2.putText(frame, f"Note {i}", (10, y_line - 10), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                
                     cx, cy = int(index_tip.x * w), int(index_tip.y * h)
                     cv2.circle(frame, (cx, cy), 10, (255, 0, 0), -1)
                     
