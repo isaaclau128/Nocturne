@@ -1,0 +1,37 @@
+{
+  "vision": {
+    "hand_detection_confidence": 0.5,
+    "face_detection_confidence": 0.5,
+    "max_hands": 1,
+    "hand_model_complexity": 0,
+    "face_refine_landmarks": true
+  },
+  "music": {
+    "solfeggio_notes": [60, 62, 64, 65, 67, 69, 71],
+    "num_notes": 7,
+    "mouth_aperture_range": [0.01, 0.08],
+    "hand_height_range": [0.2, 0.8],
+    "eye_gaze_left_threshold": 0.35,
+    "eye_gaze_right_threshold": 0.65,
+    "velocity_min": 10,
+    "velocity_max": 127
+  },
+  "midi": {
+    "port_name": "GestureSynth",
+    "note_off_velocity": 0,
+    "velocity_threshold": 5
+  },
+  "display": {
+    "window_title": "Nocturne - Gesture Synth",
+    "pitch_zone_color": [255, 255, 255],
+    "hand_position_color": [255, 0, 0],
+    "info_color": [0, 255, 0]
+  },
+  "logging": {
+    "level": "INFO",
+    "log_file": "nocturne.log",
+    "max_bytes": 5242880,
+    "backup_count": 3,
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  }
+}

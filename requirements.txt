@@ -1,5 +1,5 @@
-opencv-python
-mediapipe
-python-rtmidi
-numpy
-scikit-learn  
+opencv-python==4.10.0.84
+mediapipe==0.10.9
+python-rtmidi==1.4.9
+numpy==1.24.3
+scikit-learn==1.3.2

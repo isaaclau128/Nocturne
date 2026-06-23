@@ -1,83 +1,183 @@
 import cv2
-import mediapipe as mp
-import numpy as np
+import sys
+from core import VisionTracker, MusicProcessor, MIDIDriver
+from core.config import get_config
+from core.logging_config import setup_logging
 
-# Initialize MediaPipe Solutions
-mp_hands = mp.solutions.hands
-mp_face_mesh = mp.solutions.face_mesh
-mp_drawing = mp.solutions.drawing_utils
 
-def calculate_distance(p1, p2):
-    """Calculates Euclidean distance between two landmark points."""
-    return np.linalg.norm(np.array([p1.x, p1.y]) - np.array([p2.x, p2.y]))
+# Setup logging first
+logger = setup_logging('nocturne')
+
+
+def draw_pitch_zones(frame, num_zones, config):
+    """Draw horizontal lines indicating pitch zones."""
+    try:
+        h, w, _ = frame.shape
+        zone_color = tuple(config.get('display.pitch_zone_color', [255, 255, 255]))
+        
+        for i in range(num_zones):
+            y_line = int(h * (0.2 + (i * 0.085)))
+            cv2.line(frame, (0, y_line), (w, y_line), zone_color, 1)
+            cv2.putText(frame, f"Note {i}", (10, y_line - 10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, zone_color, 1)
+    except Exception as e:
+        logger.warning(f"Error drawing pitch zones: {e}")
+
+
+def draw_hand_position(frame, hand_landmarks, config):
+    """Draw hand tracking visualization."""
+    try:
+        if not hand_landmarks:
+            return
+        
+        h, w, _ = frame.shape
+        hand_color = tuple(config.get('display.hand_position_color', [255, 0, 0]))
+        
+        index_tip = hand_landmarks.landmark[8]
+        cx, cy = int(index_tip.x * w), int(index_tip.y * h)
+        cv2.circle(frame, (cx, cy), 10, hand_color, -1)
+        cv2.putText(frame, f"Hand Y: {round(index_tip.y, 2)}", 
+                    (30, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, hand_color, 2)
+    except Exception as e:
+        logger.warning(f"Error drawing hand position: {e}")
+
+
+def draw_dynamics(frame, velocity, config):
+    """Draw velocity/dynamics feedback."""
+    try:
+        info_color = tuple(config.get('display.info_color', [0, 255, 0]))
+        cv2.putText(frame, f"Dynamics (Velocity): {velocity}", 
+                    (30, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, info_color, 2)
+    except Exception as e:
+        logger.warning(f"Error drawing dynamics: {e}")
+
 
 def main():
-    # 1. Setup Webcam
-    cap = cv2.VideoCapture(0)
+    """Main application loop for gesture-based music synthesis."""
     
-    # 2. Initialize Models
-    with mp_hands.Hands(model_complexity=0, min_detection_confidence=0.5) as hands, \
-         mp_face_mesh.FaceMesh(refine_landmarks=True) as face_mesh:
+    vision = None
+    processor = None
+    midi = None
+    cap = None
+    
+    try:
+        # Load configuration
+        logger.info("Loading configuration...")
+        config = get_config()
+        window_title = config.get('display.window_title', 'Nocturne - Gesture Synth')
+        num_notes = config.get('music.num_notes', 7)
         
-        print("AI Instrument Running... Press 'q' to quit.")
+        # Initialize components
+        logger.info("Initializing components...")
+        vision = VisionTracker()
+        processor = MusicProcessor()
+        midi = MIDIDriver()
         
+        # Setup webcam
+        logger.info("Attempting to open webcam...")
+        cap = cv2.VideoCapture(0)
+        if not cap.isOpened():
+            logger.error("Cannot access webcam. Make sure a camera is connected.")
+            return False
+        
+        logger.info("Webcam opened successfully")
+        logger.info("Nocturne AI Instrument Running... Press 'q' to quit.")
+        
+        frame_count = 0
         while cap.isOpened():
             success, frame = cap.read()
-            if not success: break
-
-            # Flip and convert for MediaPipe
-            frame = cv2.flip(frame, 1)
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            
-            # Process Frame
-            hand_results = hands.process(rgb_frame)
-            face_results = face_mesh.process(rgb_frame)
-
-            # --- LOGIC: MOUTH (DYNAMICS) ---
-            if face_results.multi_face_landmarks:
-                for face_landmarks in face_results.multi_face_landmarks:
-                    # Landmarks 13 & 14 are inner lip centers
-                    upper_lip = face_landmarks.landmark[13]
-                    lower_lip = face_landmarks.landmark[14]
-                    
-                    mouth_opening = calculate_distance(upper_lip, lower_lip)
-                    
-                    # Visual Feedback for Dynamics
-                    cv2.putText(frame, f"Dynamics (Mouth): {round(mouth_opening, 3)}", 
-                                (30, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-
-            # --- LOGIC: HAND (SOLFEGGIO) ---
-            if hand_results.multi_hand_landmarks:
-                for hand_landmarks in hand_results.multi_hand_landmarks:
-                    # Index Finger Tip (Landmark 8)
-                    index_tip = hand_landmarks.landmark[8]
-                    
-                    # Visual Feedback for Pitch
-                    h, w, _ = frame.shape
-                    for i in range(7):
-                        # Draw horizontal lines for the 7 zones
-                        y_line = int(h * (0.2 + (i * 0.085))) # Matches the 0.2-0.8 mapping in processor
-                        cv2.line(frame, (0, y_line), (w, y_line), (255, 255, 255), 1)
-                        cv2.putText(frame, f"Note {i}", (10, y_line - 10), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-                
-                    cx, cy = int(index_tip.x * w), int(index_tip.y * h)
-                    cv2.circle(frame, (cx, cy), 10, (255, 0, 0), -1)
-                    
-                    # TODO: Map 'cy' (height) to Solfeggio notes
-                    cv2.putText(frame, f"Hand Y: {round(index_tip.y, 2)}", 
-                                (30, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
-
-            # Display Window
-            cv2.imshow('Gesture Synth Prototype', frame)
-
-            if cv2.waitKey(1) & 0xFF == ord('q'):
+            if not success:
+                logger.warning("Failed to read frame from webcam")
                 break
+            
+            frame_count += 1
+            
+            try:
+                # Process frame through vision tracker
+                frame, hand_results, face_results = vision.process_frame(frame)
+                
+                # Extract gestures and convert to MIDI
+                control_data = processor.process(hand_results, face_results)
+                note = control_data.get("pitch")
+                velocity = control_data.get("velocity", 0)
+                
+                # Send MIDI
+                if note is not None:
+                    midi.send_note(note, velocity)
+                
+                # Draw visualization
+                draw_pitch_zones(frame, num_notes, config)
+                
+                if hand_results and hand_results.multi_hand_landmarks:
+                    draw_hand_position(frame, hand_results.multi_hand_landmarks[0], config)
+                
+                draw_dynamics(frame, velocity, config)
+                
+                # Display
+                cv2.imshow(window_title, frame)
+                
+                # Log every 300 frames (~10 seconds at 30fps)
+                if frame_count % 300 == 0:
+                    logger.debug(f"Processed {frame_count} frames. Current: Note={note}, Velocity={velocity}")
+                
+                # Exit on 'q'
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    logger.info("User requested shutdown (pressed 'q')")
+                    break
+                    
+            except Exception as e:
+                logger.error(f"Error in main loop (frame {frame_count}): {e}", exc_info=True)
+                # Continue processing despite errors
+                continue
+        
+        logger.info(f"Shutdown complete. Processed {frame_count} total frames.")
+        return True
+        
+    except KeyboardInterrupt:
+        logger.info("Keyboard interrupt received. Shutting down...")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Fatal error during execution: {e}", exc_info=True)
+        return False
+        
+    finally:
+        # Cleanup
+        logger.info("Cleaning up resources...")
+        try:
+            if cap:
+                cap.release()
+                logger.debug("Webcam released")
+        except Exception as e:
+            logger.error(f"Error releasing webcam: {e}")
+        
+        try:
+            if midi:
+                midi.close()
+        except Exception as e:
+            logger.error(f"Error closing MIDI: {e}")
+        
+        try:
+            if vision:
+                vision.release()
+        except Exception as e:
+            logger.error(f"Error releasing vision tracker: {e}")
+        
+        try:
+            cv2.destroyAllWindows()
+            logger.debug("OpenCV windows closed")
+        except Exception as e:
+            logger.error(f"Error closing windows: {e}")
+        
+        logger.info("Cleanup complete")
 
-    cap.release()
-    cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-    main()
+    try:
+        success = main()
+        sys.exit(0 if success else 1)
+    except Exception as e:
+        logger.critical(f"Unexpected error: {e}", exc_info=True)
+        sys.exit(1)
 
 

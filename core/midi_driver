@@ -1,37 +1,76 @@
 import rtmidi
-import time
+from .config import get_config
+from .logging_config import get_logger
+
+
+logger = get_logger(__name__)
+
 
 class MIDIDriver:
-    def __init__(self, port_name="GestureSynth"):
-        self.midi_out = rtmidi.MidiOut()
-        self.available_ports = self.midi_out.get_ports()
-        
-        # Open an existing port or create a virtual one
-        if self.available_ports:
-            print(f"Connecting to: {self.available_ports[0]}")
-            self.midi_out.open_port(0)
-        else:
-            print("No MIDI ports found. Opening virtual port...")
-            self.midi_out.open_virtual_port(port_name)
+    def __init__(self, port_name=None):
+        """Initialize MIDI driver with config settings."""
+        try:
+            config = get_config()
+            self.midi_config = config.get_section('midi')
             
-        self.current_note = None
+            if port_name is None:
+                port_name = self.midi_config.get('port_name', 'GestureSynth')
+            
+            logger.info(f"Initializing MIDI Driver with port: {port_name}")
+            
+            self.midi_out = rtmidi.MidiOut()
+            self.available_ports = self.midi_out.get_ports()
+            self.current_note = None
+            
+            # Open an existing port or create a virtual one
+            if self.available_ports:
+                logger.info(f"Available MIDI ports: {self.available_ports}")
+                logger.info(f"Connecting to: {self.available_ports[0]}")
+                self.midi_out.open_port(0)
+            else:
+                logger.info("No MIDI ports found. Opening virtual port...")
+                self.midi_out.open_virtual_port(port_name)
+            
+            logger.info("MIDI Driver initialized successfully")
+            
+        except Exception as e:
+            logger.error(f"Error initializing MIDI Driver: {e}", exc_info=True)
+            raise
 
     def send_note(self, note, velocity):
         """
         Sends a MIDI Note On and Note Off message.
         """
-        # 1. If the hand leaves or changes notes, turn off the previous note
-        if self.current_note and (note != self.current_note or velocity < 5):
-            self.midi_out.send_message([0x80, self.current_note, 0]) # 0x80 = Note Off
-            self.current_note = None
+        try:
+            if note is None:
+                return
             
-        # 2. Trigger a new note if pitch is detected and mouth is open
-        if note and velocity > 10 and note != self.current_note:
-            self.midi_out.send_message([0x90, note, velocity]) # 0x90 = Note On
-            self.current_note = note
+            velocity_threshold = self.midi_config.get('velocity_threshold', 5)
+            
+            # 1. If the hand leaves or changes notes, turn off the previous note
+            if self.current_note and (note != self.current_note or velocity < velocity_threshold):
+                self.midi_out.send_message([0x80, self.current_note, 0])  # 0x80 = Note Off
+                logger.debug(f"Note Off: {self.current_note}")
+                self.current_note = None
+                
+            # 2. Trigger a new note if pitch is detected and mouth is open
+            if note and velocity > velocity_threshold and note != self.current_note:
+                self.midi_out.send_message([0x90, note, velocity])  # 0x90 = Note On
+                logger.debug(f"Note On: {note} (velocity: {velocity})")
+                self.current_note = note
+                
+        except Exception as e:
+            logger.error(f"Error sending MIDI note: {e}", exc_info=True)
 
     def close(self):
         """Turn off all notes and close port."""
-        if self.current_note:
-            self.midi_out.send_message([0x80, self.current_note, 0])
-        self.midi_out.close_port()
+        try:
+            if self.current_note:
+                self.midi_out.send_message([0x80, self.current_note, 0])
+                logger.debug(f"Note Off (cleanup): {self.current_note}")
+            
+            self.midi_out.close_port()
+            logger.info("MIDI port closed successfully")
+            
+        except Exception as e:
+            logger.error(f"Error closing MIDI port: {e}", exc_info=True)
