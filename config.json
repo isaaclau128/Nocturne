@@ -27,6 +27,20 @@
     "hand_position_color": [255, 0, 0],
     "info_color": [0, 255, 0]
   },
+  "recognizer": {
+    "enabled": true,
+    "model_path": "core/models/solfege_model.joblib",
+    "debounce_frames": 3,
+    "label_to_note": {
+      "do": 60,
+      "re": 62,
+      "mi": 64,
+      "fa": 65,
+      "so": 67,
+      "la": 69,
+      "ti": 71
+    }
+  },
   "logging": {
     "level": "INFO",
     "log_file": "nocturne.log",
